@@ -15,7 +15,7 @@ on:
         description: 'Sign the build'
         required: true
         type: boolean
-        default: true
+        default: false
       test-signing:
         description: 'Run pre-build signing test (optional)'
         required: false
