@@ -51,7 +51,7 @@ export function TranscriptSettings({ transcriptModelConfig, setTranscriptModelCo
         parakeet: [selectedParakeetModel],
         deepgram: ['nova-2-phonecall'],
         elevenLabs: ['eleven_multilingual_v2'],
-        groq: ['llama-3.3-70b-versatile'],
+        groq: ['whisper-large-v3', 'whisper-large-v3-turbo'],
         openai: ['gpt-4o'],
     };
     const requiresApiKey = transcriptModelConfig.provider === 'deepgram' || transcriptModelConfig.provider === 'elevenLabs' || transcriptModelConfig.provider === 'openai' || transcriptModelConfig.provider === 'groq';
