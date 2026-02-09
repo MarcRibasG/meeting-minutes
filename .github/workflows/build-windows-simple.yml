@@ -25,6 +25,14 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
       
+      - name: Build llama-helper binary
+        run: cargo build --release --manifest-path llama-helper/Cargo.toml
+      
+      - name: Copy llama-helper to binaries directory
+        run: |
+          New-Item -ItemType Directory -Force -Path frontend/src-tauri/binaries
+          Copy-Item target/release/llama-helper.exe frontend/src-tauri/binaries/llama-helper-x86_64-pc-windows-msvc.exe
+      
       - name: Install frontend dependencies
         working-directory: frontend
         run: pnpm install
