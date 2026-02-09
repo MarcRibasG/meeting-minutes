@@ -4,7 +4,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Input } from './ui/input';
 import { Button } from './ui/button';
 import { Label } from './ui/label';
-import { Eye, EyeOff, Lock, Unlock } from 'lucide-react';
+import { Eye, EyeOff, Lock, Unlock, Save, CheckCircle } from 'lucide-react';
 import { ModelManager } from './WhisperModelManager';
 import { ParakeetModelManager } from './ParakeetModelManager';
 
@@ -28,6 +28,8 @@ export function TranscriptSettings({ transcriptModelConfig, setTranscriptModelCo
     const [isLockButtonVibrating, setIsLockButtonVibrating] = useState<boolean>(false);
     const [selectedWhisperModel, setSelectedWhisperModel] = useState<string>(transcriptModelConfig.provider === 'localWhisper' ? transcriptModelConfig.model : 'small');
     const [selectedParakeetModel, setSelectedParakeetModel] = useState<string>(transcriptModelConfig.provider === 'parakeet' ? transcriptModelConfig.model : 'parakeet-tdt-0.6b-v3-int8');
+    const [isSaving, setIsSaving] = useState<boolean>(false);
+    const [saveSuccess, setSaveSuccess] = useState<boolean>(false);
 
     useEffect(() => {
         if (transcriptModelConfig.provider === 'localWhisper' || transcriptModelConfig.provider === 'parakeet') {
@@ -88,6 +90,25 @@ export function TranscriptSettings({ transcriptModelConfig, setTranscriptModelCo
             if (onModelSelect) {
                 onModelSelect();
             }
+        }
+    };
+
+    const handleSaveConfig = async () => {
+        setIsSaving(true);
+        setSaveSuccess(false);
+        try {
+            await invoke('api_save_transcript_config', {
+                provider: transcriptModelConfig.provider,
+                model: transcriptModelConfig.model,
+                apiKey: apiKey || null,
+            });
+            console.log('✅ Transcript config saved:', transcriptModelConfig.provider, transcriptModelConfig.model);
+            setSaveSuccess(true);
+            setTimeout(() => setSaveSuccess(false), 3000);
+        } catch (error) {
+            console.error('❌ Failed to save transcript config:', error);
+        } finally {
+            setIsSaving(false);
         }
     };
 
@@ -214,6 +235,26 @@ export function TranscriptSettings({ transcriptModelConfig, setTranscriptModelCo
                         </div>
                     )}
                 </div>
+            </div>
+
+            <div className="mt-6 flex justify-end">
+                <Button
+                    onClick={handleSaveConfig}
+                    disabled={isSaving}
+                    className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white"
+                >
+                    {saveSuccess ? (
+                        <>
+                            <CheckCircle className="h-4 w-4" />
+                            Saved!
+                        </>
+                    ) : (
+                        <>
+                            <Save className="h-4 w-4" />
+                            {isSaving ? 'Saving...' : 'Save Configuration'}
+                        </>
+                    )}
+                </Button>
             </div>
         </div>
     )

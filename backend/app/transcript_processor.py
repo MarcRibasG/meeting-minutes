@@ -11,7 +11,7 @@ from pydantic_ai.providers.anthropic import AnthropicProvider
 import logging
 import os
 from dotenv import load_dotenv
-from db import DatabaseManager
+from .db import DatabaseManager
 from ollama import chat
 import asyncio
 from ollama import AsyncClient

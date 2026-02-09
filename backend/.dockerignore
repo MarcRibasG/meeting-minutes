@@ -1,0 +1,80 @@
+# Python cache and compiled files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+*.cover
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Documentation
+*.md
+docs/
+examples/
+
+# Development files
+.env.example
+tests/
+test_*.py
+*_test.py
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+
+# Logs (exclude from image, use volumes)
+*.log
+logs/
+
+# Data (use volumes instead)
+data/
+*.db
+*.sqlite
+
+# Scripts not needed in container
+*.cmd
+*.bat
+*.ps1
+build_whisper.*
+clean_start_backend.*
+start_*.cmd
+setup-db.*
+run-docker.*
+build-docker.*
+
+# Docker files
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# Whisper models and custom builds
+whisper-custom/
+whisper.cpp/
+download-ggml-model.*

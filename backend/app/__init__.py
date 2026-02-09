@@ -1,0 +1,3 @@
+"""
+Meeting Minutes Backend Application
+"""
