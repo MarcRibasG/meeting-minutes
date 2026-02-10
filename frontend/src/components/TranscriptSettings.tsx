@@ -10,9 +10,11 @@ import { ParakeetModelManager } from './ParakeetModelManager';
 
 
 export interface TranscriptModelProps {
-    provider: 'localWhisper' | 'parakeet' | 'deepgram' | 'elevenLabs' | 'groq' | 'openai';
+    provider: 'localWhisper' | 'parakeet' | 'deepgram' | 'elevenLabs' | 'groq' | 'openai' | 'custom-openai';
     model: string;
     apiKey?: string | null;
+    customEndpoint?: string | null;
+    customModel?: string | null;
 }
 
 export interface TranscriptSettingsProps {
@@ -30,6 +32,8 @@ export function TranscriptSettings({ transcriptModelConfig, setTranscriptModelCo
     const [selectedParakeetModel, setSelectedParakeetModel] = useState<string>(transcriptModelConfig.provider === 'parakeet' ? transcriptModelConfig.model : 'parakeet-tdt-0.6b-v3-int8');
     const [isSaving, setIsSaving] = useState<boolean>(false);
     const [saveSuccess, setSaveSuccess] = useState<boolean>(false);
+    const [customOpenAIEndpoint, setCustomOpenAIEndpoint] = useState<string>(transcriptModelConfig.customEndpoint || '');
+    const [customOpenAIModel, setCustomOpenAIModel] = useState<string>(transcriptModelConfig.customModel || '');
 
     useEffect(() => {
         if (transcriptModelConfig.provider === 'localWhisper' || transcriptModelConfig.provider === 'parakeet') {
@@ -55,8 +59,9 @@ export function TranscriptSettings({ transcriptModelConfig, setTranscriptModelCo
         elevenLabs: ['eleven_multilingual_v2'],
         groq: ['whisper-large-v3', 'whisper-large-v3-turbo'],
         openai: ['gpt-4o'],
+        'custom-openai': customOpenAIModel ? [customOpenAIModel] : [],
     };
-    const requiresApiKey = transcriptModelConfig.provider === 'deepgram' || transcriptModelConfig.provider === 'elevenLabs' || transcriptModelConfig.provider === 'openai' || transcriptModelConfig.provider === 'groq';
+    const requiresApiKey = transcriptModelConfig.provider === 'deepgram' || transcriptModelConfig.provider === 'elevenLabs' || transcriptModelConfig.provider === 'openai' || transcriptModelConfig.provider === 'groq' || transcriptModelConfig.provider === 'custom-openai';
 
     const handleInputClick = () => {
         if (isApiKeyLocked) {
@@ -97,11 +102,13 @@ export function TranscriptSettings({ transcriptModelConfig, setTranscriptModelCo
         setIsSaving(true);
         setSaveSuccess(false);
         try {
-            await invoke('api_save_transcript_config', {
+            const configToSave = {
                 provider: transcriptModelConfig.provider,
-                model: transcriptModelConfig.model,
+                model: transcriptModelConfig.provider === 'custom-openai' ? customOpenAIModel : transcriptModelConfig.model,
                 apiKey: apiKey || null,
-            });
+            };
+            
+            await invoke('api_save_transcript_config', configToSave);
             console.log('✅ Transcript config saved:', transcriptModelConfig.provider, transcriptModelConfig.model);
             setSaveSuccess(true);
             setTimeout(() => setSaveSuccess(false), 3000);
@@ -142,10 +149,11 @@ export function TranscriptSettings({ transcriptModelConfig, setTranscriptModelCo
                                     <SelectItem value="parakeet">⚡ Parakeet (Recommended - Real-time / Accurate)</SelectItem>
                                     <SelectItem value="localWhisper">🏠 Local Whisper (High Accuracy)</SelectItem>
                                     <SelectItem value="groq">☁️ Groq</SelectItem>
+                                    <SelectItem value="custom-openai">🔧 Custom Server (OpenAI)</SelectItem>
                                 </SelectContent>
                             </Select>
 
-                            {transcriptModelConfig.provider !== 'localWhisper' && transcriptModelConfig.provider !== 'parakeet' && (
+                            {transcriptModelConfig.provider !== 'localWhisper' && transcriptModelConfig.provider !== 'parakeet' && transcriptModelConfig.provider !== 'custom-openai' && (
                                 <Select
                                     value={transcriptModelConfig.model}
                                     onValueChange={(value) => {
@@ -231,6 +239,38 @@ export function TranscriptSettings({ transcriptModelConfig, setTranscriptModelCo
                                         {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                                     </Button>
                                 </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {transcriptModelConfig.provider === 'custom-openai' && (
+                        <div className="space-y-4 border-t pt-4">
+                            <div>
+                                <Label htmlFor="custom-endpoint">Endpoint URL *</Label>
+                                <Input
+                                    id="custom-endpoint"
+                                    value={customOpenAIEndpoint}
+                                    onChange={(e) => setCustomOpenAIEndpoint(e.target.value)}
+                                    placeholder="http://localhost:8000/v1"
+                                    className="mt-1"
+                                />
+                                <p className="text-xs text-muted-foreground mt-1">
+                                    Base URL of the OpenAI-compatible transcription API
+                                </p>
+                            </div>
+
+                            <div>
+                                <Label htmlFor="custom-model">Model Name *</Label>
+                                <Input
+                                    id="custom-model"
+                                    value={customOpenAIModel}
+                                    onChange={(e) => setCustomOpenAIModel(e.target.value)}
+                                    placeholder="whisper-1, whisper-large-v3, etc."
+                                    className="mt-1"
+                                />
+                                <p className="text-xs text-muted-foreground mt-1">
+                                    Model identifier to use for transcription
+                                </p>
                             </div>
                         </div>
                     )}

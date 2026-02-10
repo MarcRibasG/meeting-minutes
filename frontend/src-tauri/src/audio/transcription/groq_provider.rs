@@ -48,8 +48,14 @@ impl TranscriptionProvider for GroqProvider {
             .part("file", audio_part)
             .text("model", self.model.clone());
 
+        // Only add language if it's a valid ISO code (not "auto-translate" or "auto")
         if let Some(lang) = language {
-            form = form.text("language", lang);
+            if lang != "auto-translate" && lang != "auto" && !lang.is_empty() {
+                info!("🌐 Groq: Using language: {}", lang);
+                form = form.text("language", lang);
+            } else {
+                info!("🌐 Groq: Using automatic language detection");
+            }
         }
 
         // Send request to Groq API
