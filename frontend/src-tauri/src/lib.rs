@@ -448,20 +448,51 @@ pub fn run() {
             // Set models directory to use app_data_dir (unified storage location)
             whisper_engine::commands::set_models_directory(&_app.handle());
 
-            // Initialize Whisper engine on startup
-            tauri::async_runtime::spawn(async {
-                if let Err(e) = whisper_engine::commands::whisper_init().await {
-                    log::error!("Failed to initialize Whisper engine on startup: {}", e);
-                }
-            });
-
             // Set Parakeet models directory
             parakeet_engine::commands::set_models_directory(&_app.handle());
 
-            // Initialize Parakeet engine on startup
-            tauri::async_runtime::spawn(async {
-                if let Err(e) = parakeet_engine::commands::parakeet_init().await {
-                    log::error!("Failed to initialize Parakeet engine on startup: {}", e);
+            // Initialize transcription engines conditionally based on configured provider
+            // This prevents loading heavy models when using cloud providers like Groq
+            let app_for_engine_init = _app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                // Check which provider is configured
+                let config = api::api::api_get_transcript_config(
+                    app_for_engine_init.clone(),
+                    app_for_engine_init.state(),
+                    None,
+                )
+                .await;
+                
+                let provider = config
+                    .ok()
+                    .flatten()
+                    .map(|c| c.provider)
+                    .unwrap_or_else(|| "parakeet".to_string());
+                
+                log::info!("Configured transcription provider: {}", provider);
+                
+                match provider.as_str() {
+                    "localWhisper" => {
+                        log::info!("Initializing Whisper engine...");
+                        if let Err(e) = whisper_engine::commands::whisper_init().await {
+                            log::error!("Failed to initialize Whisper engine: {}", e);
+                        }
+                    }
+                    "parakeet" => {
+                        log::info!("Initializing Parakeet engine...");
+                        if let Err(e) = parakeet_engine::commands::parakeet_init().await {
+                            log::error!("Failed to initialize Parakeet engine: {}", e);
+                        }
+                    }
+                    "groq" | "deepgram" | "elevenLabs" | "openai" | "custom-openai" => {
+                        log::info!("Using cloud provider '{}' - skipping local model initialization", provider);
+                    }
+                    _ => {
+                        log::warn!("Unknown provider '{}', defaulting to Parakeet initialization", provider);
+                        if let Err(e) = parakeet_engine::commands::parakeet_init().await {
+                            log::error!("Failed to initialize Parakeet engine: {}", e);
+                        }
+                    }
                 }
             });
 
