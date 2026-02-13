@@ -93,12 +93,116 @@ impl SystemAudioCapture {
                 drop_tx,
                 sample_rate,
                 receiver: Box::pin(receiver),
+                #[cfg(target_os = "linux")]
+                _stream: None,
             })
         }
 
-        #[cfg(not(target_os = "macos"))]
+        #[cfg(target_os = "linux")]
         {
-            // For non-macOS platforms, you would implement WASAPI/ALSA loopback here
+            use log::info;
+            
+            info!("Starting PulseAudio/PipeWire system audio capture (Linux)");
+            
+            // Get ALSA host which works with PulseAudio/PipeWire
+            let host = cpal::default_host();
+            
+            // Look for monitor devices
+            let mut monitor_device = None;
+            if let Ok(devices) = host.input_devices() {
+                for device in devices {
+                    if let Ok(name) = device.name() {
+                        // Monitor devices typically have "monitor" in their name
+                        // PulseAudio: "alsa_output.pci-0000_00_1f.3.analog-stereo.monitor"
+                        // PipeWire: similar patterns
+                        if name.to_lowercase().contains("monitor") {
+                            info!("Found monitor device: {}", name);
+                            monitor_device = Some(device);
+                            break;
+                        }
+                    }
+                }
+            }
+            
+            let device = monitor_device
+                .ok_or_else(|| anyhow::anyhow!("No system audio monitor device found. Make sure PulseAudio/PipeWire is running."))?;
+            
+            let config = device.default_input_config()
+                .map_err(|e| anyhow::anyhow!("Failed to get default config: {}", e))?;
+            
+            let sample_rate = config.sample_rate().0;
+            info!("Monitor device config: {:?}", config);
+            
+            let (tx, rx) = futures_channel::mpsc::unbounded::<Vec<f32>>();
+            let (drop_tx, drop_rx) = std::sync::mpsc::channel::<()>();
+            
+            // Build the input stream based on sample format
+            let stream = match config.sample_format() {
+                cpal::SampleFormat::F32 => {
+                    device.build_input_stream(
+                        &config.into(),
+                        move |data: &[f32], _: &cpal::InputCallbackInfo| {
+                            if drop_rx.try_recv().is_ok() {
+                                return;
+                            }
+                            let _ = tx.unbounded_send(data.to_vec());
+                        },
+                        |err| eprintln!("Stream error: {}", err),
+                        None,
+                    )
+                },
+                cpal::SampleFormat::I16 => {
+                    device.build_input_stream(
+                        &config.into(),
+                        move |data: &[i16], _: &cpal::InputCallbackInfo| {
+                            if drop_rx.try_recv().is_ok() {
+                                return;
+                            }
+                            let samples: Vec<f32> = data.iter().map(|&s| s as f32 / 32768.0).collect();
+                            let _ = tx.unbounded_send(samples);
+                        },
+                        |err| eprintln!("Stream error: {}", err),
+                        None,
+                    )
+                },
+                cpal::SampleFormat::U16 => {
+                    device.build_input_stream(
+                        &config.into(),
+                        move |data: &[u16], _: &cpal::InputCallbackInfo| {
+                            if drop_rx.try_recv().is_ok() {
+                                return;
+                            }
+                            let samples: Vec<f32> = data.iter().map(|&s| (s as f32 - 32768.0) / 32768.0).collect();
+                            let _ = tx.unbounded_send(samples);
+                        },
+                        |err| eprintln!("Stream error: {}", err),
+                        None,
+                    )
+                },
+                _ => {
+                    return Err(anyhow::anyhow!("Unsupported sample format: {:?}", config.sample_format()));
+                }
+            }.map_err(|e| anyhow::anyhow!("Failed to build input stream: {}", e))?;
+            
+            // Start playing the stream
+            use cpal::traits::StreamTrait;
+            stream.play().map_err(|e| anyhow::anyhow!("Failed to start stream: {}", e))?;
+            
+            info!("PulseAudio/PipeWire system audio capture started successfully");
+            
+            let receiver = rx.map(futures_util::stream::iter).flatten();
+            
+            Ok(SystemAudioStream {
+                drop_tx,
+                sample_rate,
+                receiver: Box::pin(receiver),
+                _stream: Some(stream),
+            })
+        }
+
+        #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+        {
+            // For Windows, we would implement WASAPI loopback here
             anyhow::bail!("System audio capture not yet implemented for this platform")
         }
     }
@@ -116,6 +220,8 @@ pub struct SystemAudioStream {
     drop_tx: std::sync::mpsc::Sender<()>,
     sample_rate: u32,
     receiver: Pin<Box<dyn Stream<Item = f32> + Send + Sync>>,
+    #[cfg(target_os = "linux")]
+    _stream: Option<cpal::Stream>, // Keep stream alive on Linux
 }
 
 impl Drop for SystemAudioStream {
