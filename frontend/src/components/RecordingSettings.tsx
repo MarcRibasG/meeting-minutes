@@ -3,6 +3,7 @@ import { Switch } from '@/components/ui/switch';
 import { FolderOpen } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
 import { DeviceSelection, SelectedDevices } from '@/components/DeviceSelection';
+import { LanguageSelection } from '@/components/LanguageSelection';
 import Analytics from '@/lib/analytics';
 import { toast } from 'sonner';
 
@@ -29,6 +30,7 @@ export function RecordingSettings({ onSave }: RecordingSettingsProps) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [showRecordingNotification, setShowRecordingNotification] = useState(true);
+  const [selectedLanguage, setSelectedLanguage] = useState<string>('auto-translate');
 
   // Load recording preferences on component mount
   useEffect(() => {
@@ -66,6 +68,19 @@ export function RecordingSettings({ onSave }: RecordingSettingsProps) {
       }
     };
     loadNotificationPref();
+  }, []);
+
+  // Load language preference
+  useEffect(() => {
+    const loadLanguage = async () => {
+      try {
+        const lang = await invoke<string>('get_language_preference');
+        setSelectedLanguage(lang || 'auto-translate');
+      } catch (error) {
+        console.error('Failed to load language preference:', error);
+      }
+    };
+    loadLanguage();
   }, []);
 
   const handleAutoSaveToggle = async (enabled: boolean) => {
@@ -225,6 +240,24 @@ export function RecordingSettings({ onSave }: RecordingSettingsProps) {
           checked={showRecordingNotification}
           onCheckedChange={handleNotificationToggle}
         />
+      </div>
+
+      {/* Language Selection */}
+      <div className="space-y-4">
+        <div className="border-t pt-6">
+          <h4 className="text-base font-medium text-gray-900 mb-4">Transcription Language</h4>
+          <p className="text-sm text-gray-600 mb-4">
+            Select the language for transcription. This helps improve accuracy by preventing word misinterpretation across languages.
+          </p>
+
+          <div className="border rounded-lg p-4 bg-gray-50">
+            <LanguageSelection
+              selectedLanguage={selectedLanguage}
+              onLanguageChange={setSelectedLanguage}
+              disabled={saving}
+            />
+          </div>
+        </div>
       </div>
 
       {/* Device Preferences */}
