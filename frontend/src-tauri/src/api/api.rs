@@ -608,11 +608,10 @@ pub async fn api_get_transcript_config<R: Runtime>(
 
     match SettingsRepository::get_transcript_config(pool).await {
         Ok(Some(config)) => {
-            log_info!(
-                "Found transcript config: provider={}, model={}",
-                &config.provider,
-                &config.model
-            );
+            log_info!("📖 Found transcript config: provider={}, model={}", &config.provider, &config.model);
+            if config.provider == "groq" {
+                log_info!("🌐 🌐 🌐 GROQ CLOUD TRANSCRIPTION ENABLED 🌐 🌐 🌐");
+            }
             match SettingsRepository::get_transcript_api_key(pool, &config.provider).await {
                 Ok(api_key) => {
                     log_info!("Successfully retrieved transcript config and API key.");
@@ -666,6 +665,11 @@ pub async fn api_save_transcript_config<R: Runtime>(
         log_error!("Failed to save transcript config: {}", e);
         return Err(e.to_string());
     }
+    
+    log_info!("✅ ✅ ✅ TRANSCRIPT CONFIG SAVED SUCCESSFULLY ✅ ✅ ✅");
+    log_info!("   Provider: {}", provider);
+    log_info!("   Model: {}", model);
+    log_info!("   Database: {:?}", pool);
 
     if let Some(key) = api_key {
         if !key.is_empty() {
@@ -675,6 +679,7 @@ pub async fn api_save_transcript_config<R: Runtime>(
                 log_error!("Failed to save transcript API key: {}", e);
                 return Err(e.to_string());
             }
+            log_info!("✅ API key saved successfully for provider: {}", provider);
         }
     }
 

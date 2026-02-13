@@ -6,10 +6,10 @@ import uvicorn
 from typing import Optional, List
 import logging
 from dotenv import load_dotenv
-from db import DatabaseManager
+from .db import DatabaseManager
 import json
 from threading import Lock
-from transcript_processor import TranscriptProcessor
+from .transcript_processor import TranscriptProcessor
 import time
 
 # Load environment variables
@@ -52,6 +52,12 @@ app.add_middleware(
 
 # Global database manager instance for meeting management endpoints
 db = DatabaseManager()
+
+# Health check endpoint
+@app.get("/health")
+async def health_check():
+    """Health check endpoint for Docker and monitoring"""
+    return {"status": "healthy", "service": "meeting-minutes-backend"}
 
 # New Pydantic models for meeting management
 class Transcript(BaseModel):

@@ -3,6 +3,7 @@
 // TranscriptionEngine enum and model initialization/validation logic.
 
 use super::provider::TranscriptionProvider;
+use super::groq_provider::GroqProvider;
 use log::{info, warn};
 use std::sync::Arc;
 use tauri::{AppHandle, Manager, Runtime};
@@ -135,10 +136,14 @@ pub async fn validate_transcription_model_ready<R: Runtime>(app: &AppHandle<R>) 
                 }
             }
         }
+        "groq" => {
+            info!("🌐 Groq cloud provider - no local validation needed");
+            Ok(())
+        }
         other => {
             warn!("❌ Unsupported transcription provider for local recording: {}", other);
             Err(format!(
-                "Provider '{}' is not supported for local transcription. Please select 'localWhisper' or 'parakeet'.",
+                "Provider '{}' is not supported for transcription. Please select 'localWhisper', 'parakeet', or 'groq'.",
                 other
             ))
         }
@@ -184,6 +189,18 @@ pub async fn get_or_init_transcription_engine<R: Runtime>(
 
     // Initialize the appropriate engine based on provider
     match config.provider.as_str() {
+        "groq" => {
+            info!("🌐 Initializing Groq cloud transcription provider");
+            
+            // Groq requires API key
+            let api_key = config.api_key.ok_or_else(|| {
+                "Groq provider requires an API key. Please configure it in settings.".to_string()
+            })?;
+            
+            // Create Groq provider
+            let provider = GroqProvider::new(api_key, config.model);
+            Ok(TranscriptionEngine::Provider(Arc::new(provider)))
+        }
         "parakeet" => {
             info!("🦜 Initializing Parakeet transcription engine");
 
