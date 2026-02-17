@@ -362,16 +362,27 @@ impl WhisperEngine {
     }
 
     pub async fn unload_model(&self) -> bool  {
+        log::info!("🔄 Starting Whisper model unload process...");
+        
         let mut ctx_guard = self.current_context.write().await;
-        let unloaded = ctx_guard.take().is_some();
-        if unloaded {
-            log::info!("📉Whisper model unloaded");
+        let had_context = ctx_guard.is_some();
+        
+        if let Some(ctx) = ctx_guard.take() {
+            log::info!("📉 Dropping Whisper context...");
+            drop(ctx);
+            log::info!("✅ Whisper context dropped");
+        }
+        
+        let mut model_name_guard = self.current_model.write().await;
+        if let Some(name) = model_name_guard.take() {
+            log::info!("📉 Whisper model '{}' unloaded from memory", name);
+        }
+        
+        if had_context {
+            log::info!("✅ Whisper model fully unloaded - memory freed");
         }
 
-        let mut model_name_guard = self.current_model.write().await;
-        model_name_guard.take();
-
-        unloaded
+        had_context
     }
 
     pub async fn get_current_model(&self) -> Option<String> {

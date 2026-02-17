@@ -428,16 +428,27 @@ impl ParakeetEngine {
 
     /// Unload the current model
     pub async fn unload_model(&self) -> bool {
+        log::info!("🔄 Starting Parakeet model unload process...");
+        
         let mut model_guard = self.current_model.write().await;
-        let unloaded = model_guard.take().is_some();
-        if unloaded {
-            log::info!("Parakeet model unloaded");
+        let had_model = model_guard.is_some();
+        
+        if let Some(model) = model_guard.take() {
+            log::info!("📉 Dropping Parakeet model...");
+            drop(model);
+            log::info!("✅ Parakeet model dropped");
         }
 
         let mut model_name_guard = self.current_model_name.write().await;
-        model_name_guard.take();
+        if let Some(name) = model_name_guard.take() {
+            log::info!("📉 Parakeet model '{}' unloaded from memory", name);
+        }
+        
+        if had_model {
+            log::info!("✅ Parakeet model fully unloaded - memory freed");
+        }
 
-        unloaded
+        had_model
     }
 
     /// Get the currently loaded model name
