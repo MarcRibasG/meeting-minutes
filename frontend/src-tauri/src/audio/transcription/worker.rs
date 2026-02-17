@@ -314,6 +314,10 @@ pub fn start_transcription_task<R: Runtime>(
                     }
                 }
 
+                // Drop the engine reference to allow memory deallocation
+                drop(engine_clone);
+                info!("🧹 Worker {} dropped engine reference - Arc refcount should decrease", worker_id);
+                
                 info!("👷 Worker {} completed", worker_id);
             });
 

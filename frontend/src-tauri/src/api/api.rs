@@ -671,6 +671,143 @@ pub async fn api_save_transcript_config<R: Runtime>(
     log_info!("   Model: {}", model);
     log_info!("   Database: {:?}", pool);
 
+    // Unload models when switching to cloud providers
+    match provider.as_str() {
+        "groq" | "deepgram" | "elevenLabs" | "openai" | "custom-openai" => {
+            log_info!("🌐 Switching to cloud provider '{}' - unloading local models to free memory", provider);
+            
+            // Step 0: Check if there are active transcription workers that hold Arc references
+            // If so, abort them FIRST before unloading to allow Arc refcount to reach 0
+            let had_active_workers = {
+                use crate::audio::recording_commands::{IS_RECORDING, TRANSCRIPTION_TASK};
+                
+                let is_recording = IS_RECORDING.load(std::sync::atomic::Ordering::SeqCst);
+                if is_recording {
+                    log_warn!("⚠️ Recording is active while switching providers - this will abort transcription workers");
+                    log_warn!("⚠️ Recommendation: Stop recording before changing transcription provider");
+                }
+                
+                // Take the task in a limited scope to drop the MutexGuard before await
+                let task_opt = {
+                    TRANSCRIPTION_TASK.lock().unwrap().take()
+                }; // Guard dropped here
+                
+                if let Some(task) = task_opt {
+                    log_info!("🛑 Aborting active transcription workers to release Arc references...");
+                    task.abort();
+                    log_info!("✅ Transcription task aborted");
+                    
+                    // Give a moment for workers to cleanup (drop engine_clone)
+                    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+                    true
+                } else {
+                    false
+                }
+            };
+            
+            if had_active_workers {
+                log_info!("🧹 Workers aborted - Arc references should now be dropped");
+            }
+            
+            // Step 1: Unload models to free internal memory (WhisperContext, ParakeetModel)
+            {
+                // Check refcount BEFORE cloning to get accurate count
+                let refcount_in_static = {
+                    let whisper_guard = crate::whisper_engine::commands::WHISPER_ENGINE.lock().unwrap();
+                    whisper_guard.as_ref().map(|e| std::sync::Arc::strong_count(e))
+                };
+                
+                let engine = {
+                    let whisper_guard = crate::whisper_engine::commands::WHISPER_ENGINE.lock().unwrap();
+                    whisper_guard.as_ref().cloned()
+                }; // Guard dropped here
+                
+                if let Some(engine) = engine {
+                    if let Some(count) = refcount_in_static {
+                        log_info!("🔄 Unloading Whisper model internal data... (Arc refcount in static: {})", count);
+                    }
+                    engine.unload_model().await;
+                    log_info!("✅ Whisper model data unloaded");
+                }
+            }
+            
+            {
+                // Check refcount BEFORE cloning to get accurate count
+                let refcount_in_static = {
+                    let parakeet_guard = crate::parakeet_engine::commands::PARAKEET_ENGINE.lock().unwrap();
+                    parakeet_guard.as_ref().map(|e| std::sync::Arc::strong_count(e))
+                };
+                
+                let engine = {
+                    let parakeet_guard = crate::parakeet_engine::commands::PARAKEET_ENGINE.lock().unwrap();
+                    parakeet_guard.as_ref().cloned()
+                }; // Guard dropped here
+                
+                if let Some(engine) = engine {
+                    if let Some(count) = refcount_in_static {
+                        log_info!("🔄 Unloading Parakeet model internal data... (Arc refcount in static: {})", count);
+                    }
+                    engine.unload_model().await;
+                    log_info!("✅ Parakeet model data unloaded");
+                }
+            }
+            
+            // Step 2: Clear the static globals to drop Arc references
+            *crate::whisper_engine::commands::WHISPER_ENGINE.lock().unwrap() = None;
+            *crate::parakeet_engine::commands::PARAKEET_ENGINE.lock().unwrap() = None;
+            
+            log_info!("✅ Engine references cleared from global statics");
+            
+            // Step 3: Force memory deallocation back to OS (platform-specific)
+            log_info!("🧹 Forcing memory release to OS...");
+            
+            #[cfg(target_os = "linux")]
+            {
+                unsafe {
+                    // malloc_trim(0) forces glibc to release all unused memory back to OS
+                    libc::malloc_trim(0);
+                }
+                log_info!("✅ Linux: malloc_trim complete");
+            }
+            
+            #[cfg(target_os = "windows")]
+            {
+                unsafe {
+                    // _heapmin() compacts the heap and releases unused memory to OS
+                    // Returns 0 on success, -1 on error
+                    extern "C" {
+                        fn _heapmin() -> i32;
+                    }
+                    let result = _heapmin();
+                    if result == 0 {
+                        log_info!("✅ Windows: heap minimized successfully");
+                    } else {
+                        log_warn!("⚠️ Windows: heap minimize returned {}", result);
+                    }
+                }
+            }
+            
+            #[cfg(target_os = "macos")]
+            {
+                // On macOS, memory is usually released more aggressively by default
+                // We can trigger a malloc zone pressure relief
+                log_info!("✅ macOS: relying on automatic memory management");
+            }
+            
+            log_info!("🧹 Model cleanup complete - memory should be freed within seconds");
+            log_info!("💡 Monitor system RAM to verify ~1GB decrease");
+        }
+        "localWhisper" => {
+            log_info!("🔄 Switching to local Whisper - model will be loaded on next use");
+        }
+        "parakeet" => {
+            log_info!("🔄 Switching to Parakeet - model will be loaded on next use");
+        }
+        _ => {
+            log_warn!("Unknown provider: {}", provider);
+        }
+    }
+
     if let Some(key) = api_key {
         if !key.is_empty() {
             log_info!("API key provided, saving for transcript provider...");
